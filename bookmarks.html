@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- The 'dark' class will be managed by a script -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bookmark Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="bookmark.png">
+  <link href="./output.css" rel="stylesheet">
+  <style>
+    /* Subtle scrollbars with dark mode support */
+    * { scrollbar-width: thin; scrollbar-color: #c7c7c7 transparent; }
+    *::-webkit-scrollbar { height: 8px; width: 8px; }
+    *::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 9999px; }
+    .dark * { scrollbar-color: #4a4a4a transparent; }
+    .dark *::-webkit-scrollbar-thumb { background: #4a4a4a; }
+
+    /* Input focus helpers for better a11y */
+    .focus-ring:focus-visible { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
+    /* Simple “skeleton” shimmer background */
+    .skeleton {
+      background-image: linear-gradient(90deg, rgba(0,0,0,.04) 25%, rgba(0,0,0,.08) 37%, rgba(0,0,0,.04) 63%);
+    }
+    .dark .skeleton {
+       background-image: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 37%, rgba(255,255,255,.04) 63%);
+    }
+    html, body {
+      width: 400px;
+      height: 600px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased dark:bg-black dark:text-gray-300">
+  <div id="root"></div>
+
+  <!-- React 18 (UMD) + Babel for in-page JSX -->
+  <script src="react.development.js"></script>
+  <script src="react-dom.development.js"></script>
+  <script src="babel.min.js"></script>
+
+  <script src="./app.compiled.js"></script> 
+</body>
+</html>
