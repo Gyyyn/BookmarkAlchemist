@@ -4,7 +4,9 @@
   "version": "1.0",
   "description": "Go beyond your browsers bookmarks. Search your personal bookmarks directly from the omnibox.",
   "permissions": [
-    "storage"
+    "storage",
+    "notifications",
+    "clipboardWrite"
   ],
   "background": {
     "service_worker": "background.js"
