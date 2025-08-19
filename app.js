@@ -458,7 +458,7 @@ function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportH
         <input id="import-html-file" ref={htmlFileRef} type="file" accept="text/html,.html" className="hidden" onChange={(e) => handleFileChange(e, onImportHtml)} />
 
         <DefaultButton onClick={onOpenCommandPalette} className="hidden sm:inline-flex">
-        <span className="text-xs">⌘K</span>
+        <span className="text-xs">CTRL+K / ⌘K</span>
         </DefaultButton>
         <div className="h-6 w-px bg-slate-200 dark:bg-gray-700 mx-2"></div>
         <PrimaryButton onClick={onAdd}>+ Add Bookmark</PrimaryButton>
