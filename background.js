@@ -4,6 +4,16 @@ async function getBookmarks() {
   return data.bookmark_manager_v1?.bookmarks || [];
 }
 
+// This helper function is needed to copy text from a background script.
+function writeToClipboard(text) {
+  const textarea = document.createElement('textarea');
+  textarea.textContent = text;
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 // Listen for input in the omnibox
 chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
   const bookmarks = await getBookmarks();
@@ -49,7 +59,10 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
 });
 
 // Handle what happens when the user presses 'Enter'
-chrome.omnibox.onInputEntered.addListener((url, disposition) => {
+chrome.omnibox.onInputEntered.addListener(async (url, disposition) => {
+  const settings = (await chrome.storage.local.get('settings'))?.settings || {};
+  const omniboxAction = settings.omniboxAction || 'open';
+
   // The 'url' is the 'content' property of the suggestion you selected.
   // The 'disposition' tells us how the user wants to open it.
 
@@ -58,6 +71,11 @@ chrome.omnibox.onInputEntered.addListener((url, disposition) => {
   if (!url.startsWith('http') && !url.startsWith('javascript:')) {
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
     chrome.tabs.create({ url: searchUrl });
+    return;
+  }
+
+  if (omniboxAction === 'copy') {
+    writeToClipboard(url);
     return;
   }
 
