@@ -12,6 +12,7 @@ const { useEffect, useMemo, useState, useRef, Fragment } = React;
 
 const STORAGE_KEY = 'bookmark_manager_v1';
 const THEME_KEY = 'theme';
+const SETTINGS_KEY = 'settings';
 
 const defaultData = {
     version: 1,
@@ -179,13 +180,97 @@ function Dropdown({ trigger, children }) {
         <div className="relative" ref={ref}>
             <div onClick={() => setIsOpen(o => !o)}>{trigger}</div>
             {isOpen && (
-                <div className="absolute left-0 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none animate-pop dark:bg-gray-900 dark:ring-gray-700" role="menu">
+                <div className="absolute z-10 left-0 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none animate-pop dark:bg-gray-900 dark:ring-gray-700" role="menu">
                     <div className="p-1" onClick={(e) => {
                         e.stopPropagation();
                         setIsOpen(false);
                     }}>
                         {children}
                     </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function TagsInput({ value, onChange, allTags, placeholder }) {
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const containerRef = useRef(null);
+
+    // This effect handles clicks outside the component to close the suggestions dropdown.
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const lastPart = value.substring(value.lastIndexOf(',') + 1).trim();
+
+    const suggestions = useMemo(() => {
+        if (!lastPart) return [];
+        const currentTags = value.split(',').map(t => t.trim().toLowerCase());
+        // Suggest tags that start with the typed text, and aren't already used.
+        return allTags.filter(tag =>
+            tag.toLowerCase().startsWith(lastPart.toLowerCase()) && !currentTags.includes(tag.toLowerCase())
+        );
+    }, [allTags, lastPart, value]);
+
+    const handleSuggestionClick = (suggestion) => {
+        const valueTrimmed = value.trim();
+        const lastCommaIndex = valueTrimmed.lastIndexOf(',');
+        let base = '';
+        if (lastCommaIndex !== -1) {
+            base = valueTrimmed.substring(0, lastCommaIndex + 1) + ' ';
+        }
+        const newValue = base + suggestion + ', ';
+        onChange({ target: { value: newValue } }); // Mimic event object for the handler
+        setShowSuggestions(false);
+    };
+    
+    const handleInputChange = (e) => {
+        onChange(e);
+        const lastChar = e.target.value.slice(-1);
+        // Show suggestions if the input is not empty and doesn't end with a space (after a comma)
+        if (e.target.value.length > 0 && lastChar !== ' ') {
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
+        }
+    };
+    
+    return (
+        <div className="relative" ref={containerRef}>
+            <input
+                value={value}
+                onChange={handleInputChange}
+                onFocus={() => {
+                    if (value.length > 0 && value.slice(-1) !== ' ') {
+                        setShowSuggestions(true);
+                    }
+                }}
+                placeholder={placeholder}
+                autoComplete="off" // Disable browser's default autocomplete
+                className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-900 dark:ring-gray-700 animate-pop">
+                    <ul className="max-h-40 overflow-auto p-1" role="listbox">
+                        {suggestions.map(tag => (
+                            <li
+                                key={tag}
+                                onClick={() => handleSuggestionClick(tag)}
+                                onMouseDown={(e) => e.preventDefault()} // Prevent input from losing focus before click
+                                className="cursor-pointer rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-gray-800"
+                                role="option"
+                            >
+                                {tag}
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             )}
         </div>
@@ -218,7 +303,7 @@ function ThemeSwitcher({ theme, setTheme }) {
     );
 }
 
-function BookmarkForm({ onAdd, folders }) {
+function BookmarkForm({ onAdd, folders, allTags }) {
     const [url, setUrl] = useState("");
     const [title, setTitle] = useState("");
     const [tags, setTags] = useState("");
@@ -232,21 +317,28 @@ function BookmarkForm({ onAdd, folders }) {
     }
 
     function handleSubmit(e) {
-    e.preventDefault();
-    if (!validateUrl(url)) {
-        console.error("Please enter a valid URL (include http/https).");
-        return;
-    }
-    const normalizedTitle = title.trim() || prettyHostname(url);
-    const tagsArr = tags.split(",").map(t => t.trim()).filter(Boolean);
-    onAdd({
-        id: uid(),
-        url: url.trim(),
-        title: normalizedTitle,
-        tags: tagsArr,
-        folderId,
-        createdAt: Date.now()
-    });
+        e.preventDefault();
+        if (!validateUrl(url)) {
+            console.error("Please enter a valid URL (include http/https).");
+            return;
+        }
+        
+        const normalizedTitle = title.trim() || prettyHostname(url);
+        const tagsArr = tags.split(",").map(t => t.trim()).filter(Boolean);
+        onAdd({
+            id: uid(),
+            url: url.trim(),
+            title: normalizedTitle,
+            tags: tagsArr,
+            folderId,
+            createdAt: Date.now()
+        });
+
+        setUrl("");
+        setTitle("");
+        setTags("");
+        setFolderId("root");
+
     }
 
     return (
@@ -275,11 +367,11 @@ function BookmarkForm({ onAdd, folders }) {
         </div>
         <div className="grid gap-2">
             <label className="text-sm font-medium">Tags (comma separated)</label>
-            <input
-            value={tags}
-            onChange={e => setTags(e.target.value)}
-            placeholder="design, react, docs"
-            className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400"
+            <TagsInput
+                value={tags}
+                onChange={e => setTags(e.target.value)}
+                allTags={allTags}
+                placeholder="design, react, docs"
             />
         </div>
         </div>
@@ -432,7 +524,19 @@ function ManageFoldersModal({ open, onClose, folders, onAddFolder, onRenameFolde
     );
 }
 
-function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportHtml, onImportHtml, onClearAll, onOpenCommandPalette, theme, setTheme }) {
+function SettingsToggle({ label, checked, onChange }) {
+    return (
+        <label className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" role="menuitem">
+            <span>{label}</span>
+            <div className="relative inline-flex items-center">
+                <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
+                <div className="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </div>
+        </label>
+    );
+}
+
+function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportHtml, onImportHtml, onClearAll, onOpenCommandPalette, theme, setTheme, settings, setSettings }) {
     const jsonFileRef = useRef(null);
     const htmlFileRef = useRef(null);
 
@@ -457,12 +561,6 @@ function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportH
         <input id="import-json-file" ref={jsonFileRef} type="file" accept="application/json" className="hidden" onChange={(e) => handleFileChange(e, onImportJson)} />
         <input id="import-html-file" ref={htmlFileRef} type="file" accept="text/html,.html" className="hidden" onChange={(e) => handleFileChange(e, onImportHtml)} />
 
-        <DefaultButton onClick={onOpenCommandPalette} className="hidden sm:inline-flex">
-        <span className="text-xs">CTRL+K / ⌘K</span>
-        </DefaultButton>
-        <div className="h-6 w-px bg-slate-200 dark:bg-gray-700 mx-2"></div>
-        <PrimaryButton onClick={onAdd}>+ Add Bookmark</PrimaryButton>
-        <DefaultButton onClick={onManageFolders}>Manage Folders</DefaultButton>
         <Dropdown trigger={
         <DefaultButton>
             <MenuIcon />
@@ -470,6 +568,16 @@ function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportH
         }>
         <div className="">
             <ThemeSwitcher theme={theme} setTheme={setTheme} />
+
+            <div className="border-t my-1 dark:border-gray-700"></div>
+
+            <SettingsToggle
+                label="Copy URL on Enter"
+                checked={settings.omniboxAction === 'copy'}
+                onChange={() => {
+                    setSettings(s => ({ ...s, omniboxAction: s.omniboxAction === 'copy' ? 'open' : 'copy' }));
+                }}
+            />
 
             <div className="border-t my-1 dark:border-gray-700"></div>
 
@@ -487,6 +595,13 @@ function Toolbar({ onAdd, onManageFolders, onExportJson, onImportJson, onExportH
             <button onClick={onClearAll} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/50" role="menuitem">Clear All</button>
         </div>
         </Dropdown>
+        <DefaultButton onClick={onManageFolders}>Manage Folders</DefaultButton>
+        <div className="h-6 w-px bg-slate-200 dark:bg-gray-700 mx-2"></div>
+        <PrimaryButton onClick={onAdd}>+ Add Bookmark</PrimaryButton>
+        <DefaultButton onClick={onOpenCommandPalette} className="hidden sm:inline-flex">
+            <span className="text-xs">CTRL+K / ⌘K</span>
+        </DefaultButton>
+        
     </div>
     );
 }
@@ -602,14 +717,18 @@ function FolderCard({ folder, onToggle, isExpanded, bookmarkCount }) {
     );
 }
 
-function EditBookmarkModal({ open, onClose, bookmark, onSave, folders }) {
+function EditBookmarkModal({ open, onClose, bookmark, onSave, folders, allTags }) {
     const [title, setTitle] = useState(bookmark?.title || "");
     const [tags, setTags] = useState(bookmark?.tags?.join(", ") || "");
     const firstRef = useRef(null);
 
     useEffect(() => {
-    setTitle(bookmark?.title || "");
-    setTags(bookmark?.tags?.join(", ") || "");
+        if (bookmark) {
+            setTitle(bookmark.title || "");
+            // Add a trailing comma and space if there are tags, for better UX
+            const initialTags = bookmark.tags?.join(", ") || "";
+            setTags(initialTags.length > 0 ? initialTags + ', ' : '');
+        }
     }, [bookmark]);
 
     useEffect(() => {
@@ -636,8 +755,12 @@ function EditBookmarkModal({ open, onClose, bookmark, onSave, folders }) {
         </div>
         <div className="grid gap-2">
             <label className="text-sm font-medium">Tags (comma separated)</label>
-            <input className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700"
-                    value={tags} onChange={e => setTags(e.target.value)} />
+            <TagsInput
+                value={tags}
+                onChange={e => setTags(e.target.value)}
+                allTags={allTags}
+                placeholder="design, react, docs"
+            />
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">URL: {bookmark.url}</div>
         </div>
@@ -740,6 +863,27 @@ function SortControl({ sortOrder, setSortOrder }) {
         {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
     </div>
+    );
+}
+
+function SearchResultItem({ bookmark }) {
+    const [imgSrc, setImgSrc] = useState(getFaviconUrl(bookmark.url).primary);
+    const { fallback } = getFaviconUrl(bookmark.url);
+    const host = prettyHostname(bookmark.url);
+
+    return (
+        <a href={bookmark.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-800">
+            <img 
+                src={imgSrc} 
+                onError={() => { if (imgSrc !== fallback && fallback) setImgSrc(fallback); }}
+                className="w-6 h-6 rounded"
+                alt=""
+            />
+            <div className="flex-grow truncate">
+                <div className="text-sm font-medium truncate">{bookmark.title}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{host}</div>
+            </div>
+        </a>
     );
 }
 
@@ -854,22 +998,31 @@ function App() {
     const [editTarget, setEditTarget] = useState(null);
     const [moveTarget, setMoveTarget] = useState(null);
     const [isAddModalOpen, setAddModalOpen] = useState(false);
-    const [isAnimatingAdd, setIsAnimatingAdd] = useState(false);
     const [isManageFoldersModalOpen, setManageFoldersModalOpen] = useState(false);
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [expandedFolders, setExpandedFolders] = useState([]);
     const [sortOrder, setSortOrder] = useState('default');
-    const pendingBookmark = useRef(null);
     const searchInputRef = useRef(null);
     
     const [theme, setThemeState] = useState(() => localStorage.getItem(THEME_KEY) || 'system');
+    const [settings, setSettings] = useState({ omniboxAction: 'open' });
 
     // Load initial data from chrome.storage
     useEffect(() => {
-    loadData().then(initialData => {
-        setData(initialData);
-    });
+        loadData().then(initialData => {
+            setData(initialData);
+        });
+        chrome.storage.local.get(SETTINGS_KEY, (result) => {
+            if (result[SETTINGS_KEY]) {
+                setSettings(result[SETTINGS_KEY]);
+            }
+        });
     }, []);
+
+    // Save settings to chrome.storage
+    useEffect(() => {
+        chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+    }, [settings]);
 
     // --- Auto-focus search input on page load ---
     useEffect(() => {
@@ -930,27 +1083,24 @@ function App() {
         return Array.from(set).sort((a,b) => a.localeCompare(b));
     }, [data]);
 
+    const filteredBookmarks = useMemo(() => {
+        if (!data) return [];
+        let bookmarks = data.bookmarks.slice();
+        if (query.trim()) {
+            const q = query.trim().toLowerCase();
+            bookmarks = bookmarks.filter(b =>
+                b.title.toLowerCase().includes(q) ||
+                b.url.toLowerCase().includes(q) ||
+                b.tags.some(t => t.toLowerCase().includes(q))
+            );
+        }
+        if (activeTags.length) {
+            bookmarks = bookmarks.filter(b => activeTags.every(t => b.tags.includes(t)));
+        }
+        return bookmarks;
+    }, [data, query, activeTags]);
+
     const { displayItems, bookmarksByFolder } = useMemo(() => {
-
-    // Quick race catch.
-    let filteredBookmarks = [];
-
-    if (data) {
-        filteredBookmarks = data.bookmarks.slice();
-    }
-    
-    if (query.trim()) {
-        const q = query.trim().toLowerCase();
-        filteredBookmarks = filteredBookmarks.filter(b =>
-        b.title.toLowerCase().includes(q) ||
-        b.url.toLowerCase().includes(q) ||
-        b.tags.some(t => t.toLowerCase().includes(q))
-        );
-    }
-    if (activeTags.length) {
-        filteredBookmarks = filteredBookmarks.filter(b => activeTags.every(t => b.tags.includes(t)));
-    }
-
     const sortFn = (a, b) => {
         const aName = a.title || a.name;
         const bName = b.title || b.name;
@@ -980,7 +1130,7 @@ function App() {
     const displayItems = [...sortedFolders, ...rootBookmarks];
 
     return { displayItems, bookmarksByFolder };
-    }, [data, query, activeTags, sortOrder]);
+    }, [data, filteredBookmarks, sortOrder]);
 
     // If data is not loaded yet, show a loading state
     if (!data) {
@@ -988,76 +1138,67 @@ function App() {
     }
 
     function toggleFolder(folderId) {
-    setExpandedFolders(prev => 
-        prev.includes(folderId) 
-        ? prev.filter(id => id !== folderId)
-        : [...prev, folderId]
-    );
-    }
-
-    function completeAddBookmark() {
-    if (!pendingBookmark.current) return;
-    const b = pendingBookmark.current;
-    setData(prev => ({ ...prev, bookmarks: [b, ...prev.bookmarks] }));
-    pendingBookmark.current = null;
-    setIsAnimatingAdd(false);
-    setAddModalOpen(false);
+        setExpandedFolders(prev => 
+            prev.includes(folderId) 
+            ? prev.filter(id => id !== folderId)
+            : [...prev, folderId]
+        );
     }
 
     function handleAddBookmark(bookmarkData) {
-    pendingBookmark.current = bookmarkData;
-    setIsAnimatingAdd(true);
+        setData(prev => ({ ...prev, bookmarks: [bookmarkData, ...prev.bookmarks] }));
+        setAddModalOpen(false); // This directly closes the modal
     }
 
     function removeBookmark(id) {
-    setData(prev => ({ ...prev, bookmarks: prev.bookmarks.filter(b => b.id !== id) }));
+        setData(prev => ({ ...prev, bookmarks: prev.bookmarks.filter(b => b.id !== id) }));
     }
 
     function addFolder(name, emoji) {
-    const exists = data.folders.some(f => f.name.toLowerCase() === name.toLowerCase());
-    if (exists) return;
-    const f = { id: uid(), name, emoji };
-    setData(prev => ({ ...prev, folders: [...prev.folders, f] }));
+        const exists = data.folders.some(f => f.name.toLowerCase() === name.toLowerCase());
+        if (exists) return;
+        const f = { id: uid(), name, emoji };
+        setData(prev => ({ ...prev, folders: [...prev.folders, f] }));
     }
 
     function renameFolder(id, name, emoji) {
-    setData(prev => ({
-        ...prev,
-        folders: prev.folders.map(f => f.id === id ? { ...f, name, emoji } : f)
-    }));
+        setData(prev => ({
+            ...prev,
+            folders: prev.folders.map(f => f.id === id ? { ...f, name, emoji } : f)
+        }));
     }
 
     function deleteFolder(id) {
-    setData(prev => {
-        const folders = prev.folders.filter(f => f.id !== id);
-        const bookmarks = prev.bookmarks.map(b => b.folderId === id ? { ...b, folderId: 'root' } : b);
-        return { ...prev, folders, bookmarks };
-    });
-    setExpandedFolders(prev => prev.filter(fId => fId !== id));
+        setData(prev => {
+            const folders = prev.folders.filter(f => f.id !== id);
+            const bookmarks = prev.bookmarks.map(b => b.folderId === id ? { ...b, folderId: 'root' } : b);
+            return { ...prev, folders, bookmarks };
+        });
+        setExpandedFolders(prev => prev.filter(fId => fId !== id));
     }
 
     function moveBookmark(id, folderId) {
-    setData(prev => ({
-        ...prev,
-        bookmarks: prev.bookmarks.map(b => b.id === id ? { ...b, folderId } : b)
-    }));
+        setData(prev => ({
+            ...prev,
+            bookmarks: prev.bookmarks.map(b => b.id === id ? { ...b, folderId } : b)
+        }));
     }
 
     function editBookmark(updated) {
-    setData(prev => ({
-        ...prev,
-        bookmarks: prev.bookmarks.map(b => b.id === updated.id ? updated : b)
-    }));
+        setData(prev => ({
+            ...prev,
+            bookmarks: prev.bookmarks.map(b => b.id === updated.id ? updated : b)
+        }));
     }
 
     function exportJson() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bookmarks.json";
-    a.click();
-    URL.revokeObjectURL(url);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "bookmarks.json";
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     function importJson(jsonString) {
@@ -1207,10 +1348,10 @@ function App() {
     ];
 
     return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 pt-6 pb-8">
         <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <h1 className="text-2xl font-black tracking-tight dark:text-white">Bookmark Manager</h1>
+            <h1 className="text-2xl font-black tracking-tight dark:text-white">Bookmark Alchemist</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400">Your personal, private, and portable bookmark collection.</p>
         </div>
         <Toolbar
@@ -1224,13 +1365,15 @@ function App() {
             onOpenCommandPalette={() => setCommandPaletteOpen(true)}
             theme={theme}
             setTheme={setTheme}
+            settings={settings}
+            setSettings={setSettings}
         />
         </header>
 
         <div className="mb-4 grid gap-4">
             <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft dark:bg-gray-950 dark:border-gray-800">
             <div className="flex flex-wrap items-end justify-between gap-4">
-                <div className="grid gap-2 flex-grow">
+                <div className="grid gap-2 flex-grow relative">
                 <label className="text-sm font-medium">Search</label>
                 <input
                     ref={searchInputRef}
@@ -1239,6 +1382,17 @@ function App() {
                     placeholder="Search title, URL, tags... (⌘K for actions)"
                     className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400"
                 />
+                {query.trim() && filteredBookmarks.length > 0 && filteredBookmarks.length < 3 && (
+                    <div className="relative">
+                        <div className="absolute top-full mt-2 w-full rounded-lg border border-slate-200 bg-white shadow-lg dark:bg-gray-900 dark:border-gray-700 z-10 animate-pop">
+                            <div className="p-2">
+                                {filteredBookmarks.map(bm => (
+                                    <SearchResultItem key={bm.id} bookmark={bm} />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
                 </div>
                 <SortControl sortOrder={sortOrder} setSortOrder={setSortOrder} />
             </div>
@@ -1270,16 +1424,14 @@ function App() {
         </main>
 
         <Modal
-        open={isAddModalOpen}
-        onClose={() => {
-            setAddModalOpen(false);
-            setIsAnimatingAdd(false);
-        }}
-        title="Add New Bookmark"
-        isAnimating={isAnimatingAdd}
-        onAnimationComplete={completeAddBookmark}
-        >
-        <BookmarkForm onAdd={handleAddBookmark} folders={data.folders} />
+            open={isAddModalOpen}
+            onClose={() => {
+                setAddModalOpen(false);
+            }}
+            title="Add New Bookmark"
+            >
+
+            <BookmarkForm onAdd={handleAddBookmark} folders={data.folders} allTags={allTags} />
         </Modal>
 
         <EditBookmarkModal
@@ -1288,6 +1440,7 @@ function App() {
         bookmark={editTarget}
         onSave={editBookmark}
         folders={data.folders}
+        allTags={allTags}
         />
         <MoveBookmarkModal
         open={!!moveTarget}

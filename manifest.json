@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "name": "Bookmark Alchemist: Your Personal Bookmark Search Engine",
-  "version": "1.0",
+  "name": "Bookmark Alchemist",
+  "version": "2025.2.1",
   "description": "Go beyond your browsers bookmarks. Search your personal bookmarks directly from the omnibox.",
 
   "permissions": [
@@ -20,7 +20,6 @@
   "omnibox": {
     "keyword": "bm"
   },
-
   "browser_action": {
     "default_title": "Open Cauldron",
     "default_popup": "bookmarks.html"
@@ -28,12 +27,14 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "bookmark-alchemist@your-email-or-domain.com",
+      "id": "gabrielhfrn@vivaldi.net",
       "strict_min_version": "57.0"
     }
   },
 
   "icons": {
-    "128": "bookmark.png"
+    "48": "maskable_icon_x48.png",
+    "128": "maskable_icon_x128.png",
+    "512": "maskable_icon_x512.png"
   }
 }
