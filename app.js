@@ -193,6 +193,90 @@ function Dropdown({ trigger, children }) {
     );
 }
 
+function TagsInput({ value, onChange, allTags, placeholder }) {
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const containerRef = useRef(null);
+
+    // This effect handles clicks outside the component to close the suggestions dropdown.
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const lastPart = value.substring(value.lastIndexOf(',') + 1).trim();
+
+    const suggestions = useMemo(() => {
+        if (!lastPart) return [];
+        const currentTags = value.split(',').map(t => t.trim().toLowerCase());
+        // Suggest tags that start with the typed text, and aren't already used.
+        return allTags.filter(tag =>
+            tag.toLowerCase().startsWith(lastPart.toLowerCase()) && !currentTags.includes(tag.toLowerCase())
+        );
+    }, [allTags, lastPart, value]);
+
+    const handleSuggestionClick = (suggestion) => {
+        const valueTrimmed = value.trim();
+        const lastCommaIndex = valueTrimmed.lastIndexOf(',');
+        let base = '';
+        if (lastCommaIndex !== -1) {
+            base = valueTrimmed.substring(0, lastCommaIndex + 1) + ' ';
+        }
+        const newValue = base + suggestion + ', ';
+        onChange({ target: { value: newValue } }); // Mimic event object for the handler
+        setShowSuggestions(false);
+    };
+    
+    const handleInputChange = (e) => {
+        onChange(e);
+        const lastChar = e.target.value.slice(-1);
+        // Show suggestions if the input is not empty and doesn't end with a space (after a comma)
+        if (e.target.value.length > 0 && lastChar !== ' ') {
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
+        }
+    };
+    
+    return (
+        <div className="relative" ref={containerRef}>
+            <input
+                value={value}
+                onChange={handleInputChange}
+                onFocus={() => {
+                    if (value.length > 0 && value.slice(-1) !== ' ') {
+                        setShowSuggestions(true);
+                    }
+                }}
+                placeholder={placeholder}
+                autoComplete="off" // Disable browser's default autocomplete
+                className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-900 dark:ring-gray-700 animate-pop">
+                    <ul className="max-h-40 overflow-auto p-1" role="listbox">
+                        {suggestions.map(tag => (
+                            <li
+                                key={tag}
+                                onClick={() => handleSuggestionClick(tag)}
+                                onMouseDown={(e) => e.preventDefault()} // Prevent input from losing focus before click
+                                className="cursor-pointer rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-gray-800"
+                                role="option"
+                            >
+                                {tag}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ThemeSwitcher({ theme, setTheme }) {
     const options = [
     { name: 'Light', value: 'light', icon: '☀️' },
@@ -219,7 +303,7 @@ function ThemeSwitcher({ theme, setTheme }) {
     );
 }
 
-function BookmarkForm({ onAdd, folders }) {
+function BookmarkForm({ onAdd, folders, allTags }) {
     const [url, setUrl] = useState("");
     const [title, setTitle] = useState("");
     const [tags, setTags] = useState("");
@@ -283,11 +367,11 @@ function BookmarkForm({ onAdd, folders }) {
         </div>
         <div className="grid gap-2">
             <label className="text-sm font-medium">Tags (comma separated)</label>
-            <input
-            value={tags}
-            onChange={e => setTags(e.target.value)}
-            placeholder="design, react, docs"
-            className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400"
+            <TagsInput
+                value={tags}
+                onChange={e => setTags(e.target.value)}
+                allTags={allTags}
+                placeholder="design, react, docs"
             />
         </div>
         </div>
@@ -633,14 +717,18 @@ function FolderCard({ folder, onToggle, isExpanded, bookmarkCount }) {
     );
 }
 
-function EditBookmarkModal({ open, onClose, bookmark, onSave, folders }) {
+function EditBookmarkModal({ open, onClose, bookmark, onSave, folders, allTags }) {
     const [title, setTitle] = useState(bookmark?.title || "");
     const [tags, setTags] = useState(bookmark?.tags?.join(", ") || "");
     const firstRef = useRef(null);
 
     useEffect(() => {
-    setTitle(bookmark?.title || "");
-    setTags(bookmark?.tags?.join(", ") || "");
+        if (bookmark) {
+            setTitle(bookmark.title || "");
+            // Add a trailing comma and space if there are tags, for better UX
+            const initialTags = bookmark.tags?.join(", ") || "";
+            setTags(initialTags.length > 0 ? initialTags + ', ' : '');
+        }
     }, [bookmark]);
 
     useEffect(() => {
@@ -667,8 +755,12 @@ function EditBookmarkModal({ open, onClose, bookmark, onSave, folders }) {
         </div>
         <div className="grid gap-2">
             <label className="text-sm font-medium">Tags (comma separated)</label>
-            <input className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-700"
-                    value={tags} onChange={e => setTags(e.target.value)} />
+            <TagsInput
+                value={tags}
+                onChange={e => setTags(e.target.value)}
+                allTags={allTags}
+                placeholder="design, react, docs"
+            />
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">URL: {bookmark.url}</div>
         </div>
@@ -1339,7 +1431,7 @@ function App() {
             title="Add New Bookmark"
             >
 
-            <BookmarkForm onAdd={handleAddBookmark} folders={data.folders} />
+            <BookmarkForm onAdd={handleAddBookmark} folders={data.folders} allTags={allTags} />
         </Modal>
 
         <EditBookmarkModal
@@ -1348,6 +1440,7 @@ function App() {
         bookmark={editTarget}
         onSave={editBookmark}
         folders={data.folders}
+        allTags={allTags}
         />
         <MoveBookmarkModal
         open={!!moveTarget}
